@@ -77,9 +77,13 @@
                     statusDiv.innerText = "更新 GitHub 失敗。";
                 }
 
-            } catch (err) {
-                statusDiv.innerHTML = `<span style='color:red;'>錯誤: ${err.message}</span>`;
-            }
+           } catch (err) {
+    // 強制在 iPhone 畫面上彈出警告視窗，這樣你就能看到最底層的錯誤
+    alert("除錯警告！\n錯誤名稱: " + err.name + "\n錯誤訊息: " + err.message);
+    
+    statusDiv.innerHTML = `<span style='color:red; font-weight:bold;'>❌ 發生錯誤：</span><br><small>${err.name}: ${err.message}</small>`;
+    console.error(err);
+}
         });
 
         // 喚起 iPhone 生物辨識的封裝函式
