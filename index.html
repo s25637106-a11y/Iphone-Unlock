@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iPhone Touch ID 車載解鎖系統</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding-top: 50px; background-color: #f0f2f5; }
+        .btn { padding: 20px 40px; font-size: 20px; background-color: #007aff; color: white; border: none; border-radius: 12px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .btn:active { background-color: #0056b3; }
+        #status { margin-top: 20px; font-size: 18px; color: #333; }
+    </style>
+</head>
+<body>
+
+    <h2>Keyless 系統控制面板</h2>
+    <p>請點擊下方按鈕並感應指紋解鎖車輛</p>
+    
+    <button class="btn" id="unlockBtn">感應 Touch ID 解鎖</button>
+    <div id="status">系統就緒</div>
+
+    <script>
+        // --- 請更換為你的 GitHub 資訊 ---
+        const GITHUB_TOKEN = "你的_GITHUB_PERSONAL_ACCESS_TOKEN"; 
+        const REPO = "你的GitHub帳號/my-keyless-car";
+        const FILE_PATH = "status.json";
+        // ---------------------------------
+
+        const url = `https://api.github.com/repos/${REPO}/contents/${FILE_PATH}`;
+        const headers = {
+            "Authorization": `Bearer ${GITHUB_TOKEN}`,
+            "Accept": "application/vnd.github+json"
+        };
+
+        document.getElementById('unlockBtn').addEventListener('click', async () => {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerText = "正在呼叫 Touch ID...";
+
+            try {
+                // 1. 調用瀏覽器原生的生物辨識驗證 (iPhone Touch ID / Face ID)
+                // 這裡使用簡單的認證憑證請求，會觸發 iOS 原生的指紋彈窗
+                if (!window.PublicKeyCredential) {
+                    throw new Error("此瀏覽器或裝置不支援生物辨識。");
+                }
+                
+                // 模擬一個輕量級的本機生物辨識挑戰認證
+                // 實務上這會喚起 iPhone 的 Touch ID 畫面
+                const credential = await MyTriggerTouchID(); 
+                
+                statusDiv.innerText = "指紋驗證成功！正在傳送解鎖指令...";
+
+                // 2. 自動化：先向 GitHub 取得 status.json 目前的 SHA 碼
+                const getRes = await fetch(url, { headers });
+                const getData = await getRes.json();
+                const fileSha = getData.sha;
+
+                // 3. 自動化：準備要寫入的新內容 ("unlock")
+                const newContent = JSON.stringify({ "lock_status": "unlock" }, null, 2);
+                const encodedContent = btoa(unescape(encodeURIComponent(newContent))); // 轉成 Base64
+
+                const putData = {
+                    "message": "Unlocked via iPhone Touch ID Webpage",
+                    "content": encodedContent,
+                    "sha": fileSha
+                };
+
+                // 4. 自動化：發送 PUT 請求更新 GitHub 檔案
+                const putRes = await fetch(url, {
+                    method: "PUT",
+                    headers: headers,
+                    body: JSON.stringify(putData)
+                });
+
+                if (putRes.status === 200 || putRes.status === 201) {
+                    statusDiv.innerHTML = "<span style='color:green; font-weight:bold;'>解鎖成功！車載 LED 應在數秒內點亮。</span>";
+                } else {
+                    statusDiv.innerText = "更新 GitHub 失敗。";
+                }
+
+            } catch (err) {
+                statusDiv.innerHTML = `<span style='color:red;'>錯誤: ${err.message}</span>`;
+            }
+        });
+
+        // 喚起 iPhone 生物辨識的封裝函式
+        async function MyTriggerTouchID() {
+            // 建立一個標準的 WebAuthn 挑戰
+            const challenge = new Uint8Array(32);
+            window.crypto.getRandomValues(challenge);
+            const userID = new Uint8Array(16);
+            window.crypto.getRandomValues(userID);
+
+            return await navigator.credentials.create({
+                publicKey: {
+                    challenge: challenge,
+                    rp: { name: "Keyless Car System" },
+                    user: { id: userID, name: "driver", displayName: "Driver" },
+                    pubKeyCredParams: [{ type: "public-key", alg: -7 }], // ES256 演算法
+                    authenticatorSelection: { authenticatorAttachment: "platform" }, // 強制使用設備本機辨識 (Touch ID)
+                    timeout: 60000
+                }
+            });
+        }
+    </script>
+</body>
+</html>
